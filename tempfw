@@ -1,0 +1,148 @@
+#!/bin/bash
+###################################################################
+## Скрипт добавляет разрешающие правила iptables для транзитного ##
+## трафика                                                       ##
+## после того как истечет время заданное в функции watchgog      ##
+## правило удаляется.                                            ##
+## Author smaga388@gmail.com                                     ##
+##                                                               ##
+###################################################################
+
+RED='\033[0;31m'
+NORMAL='\033[0m'
+CYAN='\033[0;36m'
+IPTBL=$(which iptables)
+TAB='FORWARD'
+NUM='1'
+CONF="yes"
+
+if [[ "$(whoami)" != root ]]; then
+    echo -e "${RED}Ошибка!${NORMAL}"
+    echo -e "${RED}вы не можете выполнить этот скрипт${NORMAL}"
+    exit 1
+fi
+
+if [[ -z $(which at)  ]]; then
+    echo -e "${RED}Ошибка!${NORMAL}"
+    echo -e "${RED}не установлен планировщик at${NORMAL}"
+    exit 1
+fi
+
+function valid_ip()
+{
+local ip=$1
+local stat=1
+
+if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    OIFS=$IFS
+    IFS='.'
+    ip=($ip)
+    IFS=$OIFS
+    [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
+    stat=$?
+fi
+return $stat
+}
+
+
+function read_proto()
+{
+echo -en "${CYAN}Укажите протокол tcp или udp: ${NORMAL}"
+read PROTO
+if [[ "$PROTO" = "tcp" ]]; then
+    AGR_PROTO="tcp"
+elif [[ "$PROTO" = "udp" ]]; then
+    AGR_PROTO="udp"
+else
+    echo -e "${RED}Ошибка! ${NORMAL}"
+    echo -e "${RED}Протокол $PROTO указан неправильно! ${NORMAL}"
+    exit 1
+fi
+}
+
+
+function read_ip()
+{
+echo -en "${CYAN}Введите исходящий IP: ${NORMAL}"
+read IP_SRC
+if valid_ip $IP_SRC; then
+    AGR_SRC="исходящего IP адреса $IP_SRC"
+else
+    echo -e "${RED}Ошибка! ${NORMAL}"
+    echo -e "${RED}Исходящий IP адрес $IP_SRC введен неправильно! ${NORMAL}"
+    exit 1
+fi
+echo -en "${CYAN}Введите IP адрес назначения: ${NORMAL}"
+read IP_DST
+if valid_ip $IP_DST; then
+    AGR_DST="IP адреса назначения $IP_DST"
+else
+    echo -e "${RED}Ошибка! ${NORMAL}"
+    echo -e "${RED}IP адрес назначения $IP_DST введен неправильно! ${NORMAL}"
+    exit 1
+fi
+if [[ "$IP_SRC" = "$IP_DST" ]]; then
+    echo -e "${RED}Ошибка! ${NORMAL}"
+    echo -e "${RED}IP адреса совпадают, попробуйте еще раз! ${NORMAL}"
+    exit 1
+fi
+}
+
+function read_port()
+{
+echo -en "${CYAN}Введите номер порта назначения: ${NORMAL}"
+read PORT
+if [[ "$PORT"  =~ ^[0-9]+$ && "$PORT" -le 65535 ]]; then
+    AGR_PORT="Порт назначения $PORT"
+else
+    echo -e "${RED}Ошибка! ${NORMAL}"
+    echo -e "${RED}Порт назначения $PORT введен неправильно! ${NORMAL}"
+    exit 1
+fi
+}
+
+function add_rules()
+{
+RULES="-s $IP_SRC -d $IP_DST -p $PROTO -m $PROTO --dport $PORT -j ACCEPT "
+$IPTBL -I $TAB $NUM $RULES
+}
+
+function watchdog()
+{
+echo "$IPTBL -D $TAB $RULES"  | at now + 1 hours 2>/dev/null
+}
+
+function agree()
+{
+    echo -e "${CYAN}Вы хотите разрешить доступ от ${RED}$AGR_SRC ${CYAN}до ${RED}$AGR_DST ${NORMAL}"
+    echo -e "${RED}$AGR_PORT, ${CYAN}протокол ${RED}$AGR_PROTO  ${NORMAL}"
+    echo -en "${CYAN}Введите для подтверждения ${RED}yes ${CYAN}или ${RED}no: ${NORMAL}"
+read AGR
+if [[ "$AGR" = "yes" ]]; then
+    echo -e "${RED}Ок, сделаем это! ${NORMAL}"
+    add_rules
+    watchdog
+    echo -e "${RED}Через час доступ будет закрыт! ${NORMAL}"
+else
+    echo -e "${RED}Работа програмы будет прекращена! ${NORMAL}"
+    exit 1
+fi
+}
+
+
+function starting()
+{
+    read_ip
+    read_proto
+    read_port
+    agree
+    echo "$(date +%T_%x) пользователь $SUDO_USER установил правило $IPTBL -I $TAB $NUM $RULES" >> /var/log/openfw.log
+
+}
+
+while [[ "$CONF" = "yes" ]]; do
+  unset $CONF
+  starting
+  echo -en "${CYAN}Хотите задать еще одно правило? ${RED}yes ${CYAN}или ${RED}no: ${NORMAL}"
+  read CONF
+done
