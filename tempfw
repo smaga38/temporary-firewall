@@ -16,7 +16,7 @@ TAB='FORWARD'
 NUM='1'
 CONF="yes"
 
-if [[ "$(whoami)" != root ]]; then
+if [[ $UID -ne 0 ]]; then
     echo -e "${RED}Ошибка!${NORMAL}"
     echo -e "${RED}вы не можете выполнить этот скрипт${NORMAL}"
     exit 1
