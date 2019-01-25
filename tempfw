@@ -11,7 +11,7 @@
 RED='\033[0;31m'
 NORMAL='\033[0m'
 CYAN='\033[0;36m'
-IPTBL=$(which iptables)
+IPTBL=$(command -v iptables)
 TAB='FORWARD'
 NUM='1'
 CONF="yes"
@@ -22,7 +22,7 @@ if [[ $UID -ne 0 ]]; then
     exit 1
 fi
 
-if [[ -z $(which at)  ]]; then
+if [[ -z $(command -v at)  ]]; then
     echo -e "${RED}Ошибка!${NORMAL}"
     echo -e "${RED}не установлен планировщик at${NORMAL}"
     exit 1
@@ -36,7 +36,7 @@ local stat=1
 if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
     OIFS=$IFS
     IFS='.'
-    ip=($ip)
+    ip=("$ip")
     IFS=$OIFS
     [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
     stat=$?
@@ -48,7 +48,7 @@ return $stat
 function read_proto()
 {
 echo -en "${CYAN}Укажите протокол tcp или udp: ${NORMAL}"
-read PROTO
+read -r PROTO
 if [[ "$PROTO" = "tcp" ]]; then
     AGR_PROTO="tcp"
 elif [[ "$PROTO" = "udp" ]]; then
@@ -64,8 +64,8 @@ fi
 function read_ip()
 {
 echo -en "${CYAN}Введите исходящий IP: ${NORMAL}"
-read IP_SRC
-if valid_ip $IP_SRC; then
+read -r IP_SRC
+if valid_ip "$IP_SRC"; then
     AGR_SRC="исходящего IP адреса $IP_SRC"
 else
     echo -e "${RED}Ошибка! ${NORMAL}"
@@ -73,8 +73,8 @@ else
     exit 1
 fi
 echo -en "${CYAN}Введите IP адрес назначения: ${NORMAL}"
-read IP_DST
-if valid_ip $IP_DST; then
+read -r IP_DST
+if valid_ip "$IP_DST"; then
     AGR_DST="IP адреса назначения $IP_DST"
 else
     echo -e "${RED}Ошибка! ${NORMAL}"
@@ -91,7 +91,7 @@ fi
 function read_port()
 {
 echo -en "${CYAN}Введите номер порта назначения: ${NORMAL}"
-read PORT
+read -r PORT
 if [[ "$PORT"  =~ ^[0-9]+$ && "$PORT" -le 65535 ]]; then
     AGR_PORT="Порт назначения $PORT"
 else
@@ -104,7 +104,7 @@ fi
 function add_rules()
 {
 RULES="-s $IP_SRC -d $IP_DST -p $PROTO -m $PROTO --dport $PORT -j ACCEPT "
-$IPTBL -I $TAB $NUM $RULES
+$IPTBL -I "$TAB" "$NUM" "$RULES"
 }
 
 function watchdog()
@@ -117,7 +117,7 @@ function agree()
     echo -e "${CYAN}Вы хотите разрешить доступ от ${RED}$AGR_SRC ${CYAN}до ${RED}$AGR_DST ${NORMAL}"
     echo -e "${RED}$AGR_PORT, ${CYAN}протокол ${RED}$AGR_PROTO  ${NORMAL}"
     echo -en "${CYAN}Введите для подтверждения ${RED}yes ${CYAN}или ${RED}no: ${NORMAL}"
-read AGR
+read -r AGR
 if [[ "$AGR" = "yes" ]]; then
     echo -e "${RED}Ок, сделаем это! ${NORMAL}"
     add_rules
@@ -144,5 +144,5 @@ while [[ "$CONF" = "yes" ]]; do
   unset $CONF
   starting
   echo -en "${CYAN}Хотите задать еще одно правило? ${RED}yes ${CYAN}или ${RED}no: ${NORMAL}"
-  read CONF
+  read -r CONF
 done
